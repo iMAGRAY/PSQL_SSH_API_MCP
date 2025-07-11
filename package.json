@@ -1,0 +1,92 @@
+{
+  "name": "postgresql-api-ssh-mcp-server",
+  "version": "1.0.0",
+  "description": "🚀 Универсальный MCP сервер для PostgreSQL, REST API и SSH операций с расширенными возможностями ИИ анализа и безопасным редактированием баз данных",
+  "main": "simple_openmcp_server.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node simple_openmcp_server.cjs",
+    "test": "node simple_openmcp_server.cjs --test",
+    "dev": "node simple_openmcp_server.cjs",
+    "check": "node -c simple_openmcp_server.cjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "postgresql",
+    "postgres",
+    "database",
+    "sql",
+    "api",
+    "rest-api",
+    "ssh",
+    "cursor",
+    "claude",
+    "ai",
+    "artificial-intelligence",
+    "database-management",
+    "server-management",
+    "migration",
+    "schema",
+    "analytics",
+    "security",
+    "validation"
+  ],
+  "author": {
+    "name": "MCP Developer",
+    "email": "developer@mcp-servers.com"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "pg": "^8.11.3",
+    "ssh2": "^1.15.0",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/postgresql-api-ssh-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/postgresql-api-ssh-mcp-server/issues"
+  },
+  "homepage": "https://github.com/your-username/postgresql-api-ssh-mcp-server#readme",
+  "files": [
+    "simple_openmcp_server.cjs",
+    "package.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "mcp_config.md"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/your-username"
+  },
+  "config": {
+    "mcp_version": "1.0",
+    "supported_protocols": [
+      "mcp",
+      "postgresql",
+      "ssh",
+      "http"
+    ]
+  }
+} 
