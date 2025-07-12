@@ -6,11 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node simple_openmcp_server.cjs",
-    "test": "node tests/security.test.js",
     "dev": "node simple_openmcp_server.cjs",
-    "check": "node --check simple_openmcp_server.cjs",
-    "test:security": "node tests/security.test.js",
-    "modern": "node server.js"
+    "check": "node --check simple_openmcp_server.cjs"
   },
   "keywords": [
     "mcp",
@@ -60,14 +57,14 @@
   "files": [
     "simple_openmcp_server.cjs",
     "src/",
-    "tests/",
     "package.json",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
     "mcp_config.md",
-    "FINAL_STATUS.md",
-    "MODULAR_REFACTORING_REPORT.md"
+    "FINAL_STATUS_v4.0.md",
+    "EFFICIENCY_OPTIMIZATION_REPORT.md",
+    "NAME_OPTIMIZATION_RESULTS.md"
   ],
   "os": [
     "darwin",
