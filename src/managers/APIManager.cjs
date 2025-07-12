@@ -8,6 +8,7 @@
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+const Constants = require('../constants/Constants.cjs');
 
 class APIManager {
   constructor(logger, security, validation) {
@@ -26,22 +27,28 @@ class APIManager {
       errors: 0
     };
     
-    // Скользящее окно для детальной статистики
+    // Безопасное скользящее окно для детальной статистики
     this.slidingWindow = {
-      windowSize: 1000,      // Размер окна (количество запросов)
-      maxAge: 3600000,       // Максимальный возраст записи (1 час)
+      windowSize: Constants.BUFFERS.SLIDING_WINDOW_SIZE,      // Размер окна (количество запросов)
+      maxAge: Constants.TIMEOUTS.STATISTICS_WINDOW,       // Максимальный возраст записи (1 час)
       requests: [],          // Массив запросов с timestamp
-      currentIndex: 0
+      currentIndex: 0,       // Текущий индекс для записи
+      isLocked: false        // Флаг для предотвращения concurrent access
     };
     
     // Интервал очистки старых записей (каждые 5 минут)
     this.cleanupInterval = setInterval(() => {
-      this.cleanupOldRecords();
-    }, 5 * 60 * 1000);
+      this.safeCleanupOldRecords();
+    }, Constants.RATE_LIMIT.CLEANUP_INTERVAL);
   }
 
-  // Добавление записи в скользящее окно
+  // Безопасное добавление записи в скользящее окно
   addToSlidingWindow(type, success = true) {
+    if (this.slidingWindow.isLocked) {
+      // Если окно заблокировано, пропускаем запись
+      return;
+    }
+    
     const now = Date.now();
     const record = {
       timestamp: now,
@@ -49,43 +56,78 @@ class APIManager {
       success
     };
     
-    // Круговая замена в фиксированном массиве
+    // Безопасная круговая замена в фиксированном массиве
     if (this.slidingWindow.requests.length < this.slidingWindow.windowSize) {
+      // Добавляем в конец, если есть место
       this.slidingWindow.requests.push(record);
     } else {
-      this.slidingWindow.requests[this.slidingWindow.currentIndex] = record;
-      this.slidingWindow.currentIndex = (this.slidingWindow.currentIndex + 1) % this.slidingWindow.windowSize;
+      // Перезаписываем старую запись
+      const index = this.slidingWindow.currentIndex;
+      this.slidingWindow.requests[index] = record;
+      this.slidingWindow.currentIndex = (index + 1) % this.slidingWindow.windowSize;
     }
   }
 
-  // Очистка устаревших записей
-  cleanupOldRecords() {
-    const now = Date.now();
-    const cutoff = now - this.slidingWindow.maxAge;
-    
-    this.slidingWindow.requests = this.slidingWindow.requests.filter(
-      record => record.timestamp > cutoff
-    );
-    
-    // Обновление индекса
-    if (this.slidingWindow.currentIndex >= this.slidingWindow.requests.length) {
-      this.slidingWindow.currentIndex = 0;
+  // Безопасная очистка устаревших записей
+  async safeCleanupOldRecords() {
+    if (this.slidingWindow.isLocked) {
+      return; // Уже выполняется очистка
     }
     
-    this.logger.debug('Cleaned up old API records', {
-      remaining: this.slidingWindow.requests.length,
-      windowSize: this.slidingWindow.windowSize
-    });
+    this.slidingWindow.isLocked = true;
+    
+    try {
+      const now = Date.now();
+      const cutoff = now - this.slidingWindow.maxAge;
+      const originalLength = this.slidingWindow.requests.length;
+      
+      // Создаем новый массив с валидными записями
+      const validRecords = this.slidingWindow.requests.filter(
+        record => record && record.timestamp > cutoff
+      );
+      
+      // Атомарная замена массива
+      this.slidingWindow.requests = validRecords;
+      
+      // Обновление индекса с защитой от overflow
+      if (this.slidingWindow.currentIndex >= validRecords.length) {
+        this.slidingWindow.currentIndex = validRecords.length > 0 ? 
+          validRecords.length % this.slidingWindow.windowSize : 0;
+      }
+      
+      this.logger.debug('Cleaned up old API records', {
+        originalLength,
+        remaining: validRecords.length,
+        windowSize: this.slidingWindow.windowSize,
+        currentIndex: this.slidingWindow.currentIndex
+      });
+      
+    } catch (error) {
+      this.logger.error('Error during sliding window cleanup', { error: error.message });
+    } finally {
+      this.slidingWindow.isLocked = false;
+    }
   }
 
-  // Получение статистики скользящего окна
+  // Безопасное получение статистики скользящего окна
   getSlidingWindowStats() {
-    const now = Date.now();
-    const oneHourAgo = now - 3600000;
-    const oneMinuteAgo = now - 60000;
+    if (this.slidingWindow.isLocked) {
+      // Возвращаем пустую статистику если окно заблокировано
+      return {
+        last_hour: { total: 0, successful: 0, failed: 0, get: 0, post: 0, put: 0, delete: 0, patch: 0 },
+        last_minute: { total: 0, successful: 0, failed: 0 }
+      };
+    }
     
-    const recentRequests = this.slidingWindow.requests.filter(r => r.timestamp > oneHourAgo);
-    const lastMinuteRequests = this.slidingWindow.requests.filter(r => r.timestamp > oneMinuteAgo);
+    const now = Date.now();
+    const oneHourAgo = now - Constants.TIMEOUTS.STATISTICS_WINDOW;
+    const oneMinuteAgo = now - Constants.TIMEOUTS.STATISTICS_MINUTE;
+    
+    // Безопасное создание копии массива для фильтрации
+    const requestsCopy = [...this.slidingWindow.requests];
+    
+    const recentRequests = requestsCopy.filter(r => r && r.timestamp > oneHourAgo);
+    const lastMinuteRequests = requestsCopy.filter(r => r && r.timestamp > oneMinuteAgo);
     
     return {
       last_hour: {
@@ -111,7 +153,7 @@ class APIManager {
     const { action, url, ...params } = args;
     
     try {
-      this.logger.info('API action requested', { action, url: url?.substring(0, 100) });
+      this.logger.info('API action requested', { action, url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH) });
       
       switch (action) {
         case 'get':
@@ -134,7 +176,7 @@ class APIManager {
       this.addToSlidingWindow(action?.toUpperCase() || 'UNKNOWN', false);
       this.logger.error('API action failed', { 
         action, 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -154,7 +196,7 @@ class APIManager {
       const response = await this.makeRequest('GET', url, null, requestHeaders);
       
       this.logger.info('GET request completed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         status: response.statusCode 
       });
       
@@ -170,7 +212,7 @@ class APIManager {
     } catch (error) {
       this.addToSlidingWindow('GET', false);
       this.logger.error('GET request failed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -190,7 +232,7 @@ class APIManager {
       const response = await this.makeRequest('POST', url, data, requestHeaders);
       
       this.logger.info('POST request completed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         status: response.statusCode 
       });
       
@@ -206,7 +248,7 @@ class APIManager {
     } catch (error) {
       this.addToSlidingWindow('POST', false);
       this.logger.error('POST request failed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -226,7 +268,7 @@ class APIManager {
       const response = await this.makeRequest('PUT', url, data, requestHeaders);
       
       this.logger.info('PUT request completed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         status: response.statusCode 
       });
       
@@ -242,7 +284,7 @@ class APIManager {
     } catch (error) {
       this.addToSlidingWindow('PUT', false);
       this.logger.error('PUT request failed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -262,7 +304,7 @@ class APIManager {
       const response = await this.makeRequest('DELETE', url, null, requestHeaders);
       
       this.logger.info('DELETE request completed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         status: response.statusCode 
       });
       
@@ -278,7 +320,7 @@ class APIManager {
     } catch (error) {
       this.addToSlidingWindow('DELETE', false);
       this.logger.error('DELETE request failed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -298,7 +340,7 @@ class APIManager {
       const response = await this.makeRequest('PATCH', url, data, requestHeaders);
       
       this.logger.info('PATCH request completed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         status: response.statusCode 
       });
       
@@ -314,7 +356,7 @@ class APIManager {
     } catch (error) {
       this.addToSlidingWindow('PATCH', false);
       this.logger.error('PATCH request failed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -340,7 +382,7 @@ class APIManager {
         const responseTime = Date.now() - startTime;
         
         this.logger.info('API check completed', { 
-          url: url?.substring(0, 100), 
+          url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
           status: response.statusCode,
           responseTime 
         });
@@ -369,7 +411,7 @@ class APIManager {
       
     } catch (error) {
       this.logger.error('API check failed', { 
-        url: url?.substring(0, 100), 
+        url: url?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -439,7 +481,7 @@ class APIManager {
           path: parsedUrl.pathname + parsedUrl.search,
           method,
           headers,
-          timeout: 30000
+          timeout: Constants.NETWORK.TIMEOUT_SSH_COMMAND
         };
 
         const req = httpModule.request(options, (res) => {
@@ -449,7 +491,7 @@ class APIManager {
             responseData += chunk;
             
             // Защита от слишком больших ответов
-            if (responseData.length > 10 * 1024 * 1024) { // 10MB
+            if (responseData.length > Constants.LIMITS.MAX_DATA_SIZE) { // 10MB
               req.destroy();
               reject(new Error('Response too large'));
               return;
@@ -514,7 +556,7 @@ class APIManager {
       memory_usage: {
         window_size: this.slidingWindow.requests.length,
         max_window_size: this.slidingWindow.windowSize,
-        memory_efficiency: `${((this.slidingWindow.requests.length / this.slidingWindow.windowSize) * 100).toFixed(1)}%`
+        memory_efficiency: `${((this.slidingWindow.requests.length / this.slidingWindow.windowSize) * Constants.LIMITS.DEFAULT_QUERY_LIMIT).toFixed(1)}%`
       }
     };
   }
@@ -544,4 +586,4 @@ function createAPIManager(logger, security, validation) {
   return new APIManager(logger, security, validation);
 }
 
-module.exports = { createAPIManager, APIManager }; 
+module.exports = APIManager; 

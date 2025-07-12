@@ -1,7 +1,7 @@
 // 🔍 QUERY SERVICE
 // Централизованное выполнение запросов и команд
 
-const { PERFORMANCE_LIMITS, QUERY_LIMITS } = require('../constants/index.cjs');
+const Constants = require('../constants/Constants.cjs');
 const logger = require('../logger/index.cjs');
 
 class QueryService {
@@ -50,7 +50,7 @@ class QueryService {
       return result;
     } catch (error) {
       this._recordFailure();
-      logger.error('SQL query failed', { sql: sql.substring(0, 100), error: error.message });
+      logger.error('SQL query failed', { sql: sql.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), error: error.message });
       throw error;
     }
   }
@@ -107,15 +107,15 @@ class QueryService {
       return result;
     } catch (error) {
       this._recordFailure();
-      logger.error('SSH command failed', { command: command.substring(0, 100), error: error.message });
+      logger.error('SSH command failed', { command: command.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), error: error.message });
       throw error;
     }
   }
 
   // Выполнение пакетных SQL операций
   async executeBatch(profileType, profileName, queries) {
-    if (queries.length > QUERY_LIMITS.MAX_BATCH_SIZE) {
-      throw new Error(`Batch size exceeds limit: ${QUERY_LIMITS.MAX_BATCH_SIZE}`);
+    if (queries.length > Constants.LIMITS.MAX_BATCH_SIZE) {
+      throw new Error(`Batch size exceeds limit: ${Constants.LIMITS.MAX_BATCH_SIZE}`);
     }
 
     const results = [];
@@ -191,8 +191,8 @@ class QueryService {
       throw new Error('SQL query is required and must be a string');
     }
     
-    if (sql.length > QUERY_LIMITS.MAX_QUERY_LENGTH) {
-      throw new Error(`Query too long: ${sql.length} > ${QUERY_LIMITS.MAX_QUERY_LENGTH}`);
+    if (sql.length > Constants.LIMITS.MAX_QUERY_LENGTH) {
+      throw new Error(`Query too long: ${sql.length} > ${Constants.LIMITS.MAX_QUERY_LENGTH}`);
     }
     
     // Используем валидацию из ValidationService если доступна
@@ -207,8 +207,8 @@ class QueryService {
       throw new Error('Command is required and must be a string');
     }
     
-    if (command.length > QUERY_LIMITS.MAX_COMMAND_LENGTH) {
-      throw new Error(`Command too long: ${command.length} > ${QUERY_LIMITS.MAX_COMMAND_LENGTH}`);
+    if (command.length > Constants.LIMITS.MAX_COMMAND_LENGTH) {
+      throw new Error(`Command too long: ${command.length} > ${Constants.LIMITS.MAX_COMMAND_LENGTH}`);
     }
     
     // Используем валидацию из ValidationService если доступна
@@ -219,15 +219,21 @@ class QueryService {
 
   // Получение конфигурации профиля
   async _getProfileConfig(profileType, profileName) {
-    // Здесь будет обращение к SecurityService для получения расшифрованного профиля
-    // Временная заглушка
-    return {
-      host: 'localhost',
-      port: profileType === 'postgresql' ? 5432 : 22,
-      username: 'user',
-      password: 'password',
-      database: profileType === 'postgresql' ? 'testdb' : undefined
-    };
+    if (!this.profileService) {
+      throw new Error('ProfileService not available');
+    }
+    
+    const profile = await this.profileService.getProfile(profileName);
+    if (!profile) {
+      throw new Error(`Profile '${profileName}' not found`);
+    }
+    
+    // Валидация профиля
+    if (!profile.host || !profile.username || !profile.password) {
+      throw new Error(`Invalid profile configuration for '${profileName}'`);
+    }
+    
+    return profile;
   }
 
   // Обновление статистики
@@ -247,7 +253,7 @@ class QueryService {
   getStats() {
     return {
       ...this.queryStats,
-      successRate: this.queryStats.executed / (this.queryStats.executed + this.queryStats.failed) * 100 || 0
+      successRate: this.queryStats.executed / (this.queryStats.executed + this.queryStats.failed) * Constants.LIMITS.DEFAULT_QUERY_LIMIT || 0
     };
   }
 

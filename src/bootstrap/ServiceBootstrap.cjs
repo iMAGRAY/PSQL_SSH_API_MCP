@@ -80,53 +80,63 @@ class ServiceBootstrap {
       
       this.initialized = true;
       
-      console.log('✅ Service Layer initialized successfully');
+      if (this.container.has('logger')) {
+        const logger = this.container.get('logger');
+        logger.info('Service Layer initialized successfully');
+      } else {
+        process.stdout.write('✅ Service Layer initialized successfully\n');
+      }
       return this.container;
       
     } catch (error) {
-      console.error('❌ Service Layer initialization failed:', error);
+      if (this.container && this.container.has('logger')) {
+        const logger = this.container.get('logger');
+        logger.error('Service Layer initialization failed', { error: error.message });
+      } else {
+        process.stderr.write(`❌ Service Layer initialization failed: ${error.message}\n`);
+      }
       throw error;
     }
   }
 
   static async registerBaseServices() {
-    const { createLogger } = require('../services/Logger.cjs');
-    const { createSecurity } = require('../services/Security.cjs');
-    const { createValidation } = require('../services/Validation.cjs');
+    const Logger = require('../services/Logger.cjs');
+    const Security = require('../services/Security.cjs');
+    const Validation = require('../services/Validation.cjs');
+    const ProfileService = require('../services/ProfileService.cjs');
 
     // Logger (базовый сервис)
-    this.container.register('logger', () => createLogger(), { singleton: true });
+    this.container.register('logger', () => new Logger(), { singleton: true });
 
     // Security сервис
-    this.container.register('security', (logger) => createSecurity(logger), { 
+    this.container.register('security', (logger) => new Security(logger), { 
       singleton: true,
       dependencies: ['logger'] 
     });
 
     // Validation сервис
-    this.container.register('validation', (logger) => createValidation(logger), { 
+    this.container.register('validation', (logger) => new Validation(logger), { 
       singleton: true,
       dependencies: ['logger'] 
     });
 
     // Profile сервис
-    const { createProfileService } = require('../services/ProfileService.cjs');
     this.container.register('profileService', (logger, security) => 
-      createProfileService(logger, security), { 
+      new ProfileService(logger, security), { 
       singleton: true,
       dependencies: ['logger', 'security'] 
     });
   }
 
   static async registerManagers() {
-    const { createPostgreSQLManager } = require('../managers/PostgreSQLManager.cjs');
-    const { createSSHManager } = require('../managers/SSHManager.cjs');
-    const { createAPIManager } = require('../managers/APIManager.cjs');
+    const PostgreSQLManager = require('../managers/PostgreSQLManager.cjs');
+    const SSHManager = require('../managers/SSHManager.cjs');
+    const APIManager = require('../managers/APIManager.cjs');
 
     // PostgreSQL Manager
     this.container.register('postgresqlManager', 
       (logger, security, validation, profileService) => 
-        createPostgreSQLManager(logger, security, validation, profileService), { 
+        new PostgreSQLManager(logger, security, validation, profileService), { 
       singleton: true,
       dependencies: ['logger', 'security', 'validation', 'profileService'] 
     });
@@ -134,7 +144,7 @@ class ServiceBootstrap {
     // SSH Manager
     this.container.register('sshManager', 
       (logger, security, validation, profileService) => 
-        createSSHManager(logger, security, validation, profileService), { 
+        new SSHManager(logger, security, validation, profileService), { 
       singleton: true,
       dependencies: ['logger', 'security', 'validation', 'profileService'] 
     });
@@ -142,7 +152,7 @@ class ServiceBootstrap {
     // API Manager
     this.container.register('apiManager', 
       (logger, security, validation) => 
-        createAPIManager(logger, security, validation), { 
+        new APIManager(logger, security, validation), { 
       singleton: true,
       dependencies: ['logger', 'security', 'validation'] 
     });
@@ -166,10 +176,10 @@ class ServiceBootstrap {
       this.container = null;
       this.initialized = false;
       
-      console.log('✅ Service Layer cleanup completed');
+      process.stdout.write('✅ Service Layer cleanup completed\n');
       
     } catch (error) {
-      console.error('❌ Service Layer cleanup failed:', error);
+      process.stderr.write(`❌ Service Layer cleanup failed: ${error.message}\n`);
       throw error;
     }
   }

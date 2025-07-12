@@ -2,6 +2,7 @@
 // Безопасные SSH операции с защитой от command injection
 
 const { TIMEOUTS, DEFAULTS, ACTIONS, AI_HINTS } = require('../constants/index.cjs');
+const Constants = require('../constants/Constants.cjs');
 const securityManager = require('../security/index.cjs');
 const logger = require('../logger/index.cjs');
 
@@ -143,8 +144,8 @@ class SSHManager {
     }
 
     // Ограничиваем длину команды
-    if (command.length > 1000) {
-      throw new Error('Команда слишком длинная (максимум 1000 символов)');
+    if (command.length > Constants.LIMITS.MAX_SQL_COMMAND_LENGTH) {
+      throw new Error(`Команда слишком длинная (максимум ${Constants.LIMITS.MAX_SQL_COMMAND_LENGTH} символов)`);
     }
 
     return command.trim();

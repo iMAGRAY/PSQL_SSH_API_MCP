@@ -3,6 +3,17 @@
 // 🚀 POSTGRESQL + API + SSH MCP СЕРВЕР v4.0
 // Эффективная Service Layer архитектура
 
+// Глобальные обработчики ошибок для async/await consistency
+process.on('unhandledRejection', (reason, promise) => {
+  process.stderr.write(`🔥 Unhandled Promise Rejection: ${reason}\n`);
+  process.stderr.write(`Promise: ${promise}\n`);
+});
+
+process.on('uncaughtException', (error) => {
+  process.stderr.write(`🔥 Uncaught Exception: ${error.message}\n`);
+  process.exit(1);
+});
+
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { 
@@ -47,7 +58,7 @@ class MCPServer {
       logger.info('MCP Server v4.0 initialized with Service Layer architecture');
       
     } catch (error) {
-      console.error('Failed to initialize MCP Server:', error);
+      process.stderr.write(`Failed to initialize MCP Server: ${error.message}\n`);
       throw error;
     }
   }
@@ -213,7 +224,7 @@ class MCPServer {
         await ServiceBootstrap.cleanup();
         process.exit(0);
       } catch (error) {
-        console.error('Cleanup failed:', error);
+                  process.stderr.write(`Cleanup failed: ${error.message}\n`);
         process.exit(1);
       }
     };
@@ -221,7 +232,7 @@ class MCPServer {
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
     process.on('uncaughtException', (error) => {
-      console.error('Uncaught exception:', error);
+              process.stderr.write(`Uncaught exception: ${error.message}\n`);
       cleanup();
     });
   }
@@ -243,7 +254,10 @@ class MCPServer {
 // Запуск сервера
 if (require.main === module) {
   const server = new MCPServer();
-  server.run().catch(console.error);
+  server.run().catch(error => {
+  process.stderr.write(`Server run failed: ${error.message}\n`);
+  process.exit(1);
+});
 }
 
 module.exports = MCPServer; 

@@ -5,6 +5,9 @@
  * Система валидации входных данных и параметров
  */
 
+const Constants = require('../constants/Constants.cjs');
+const NetworkUtils = require('../utils/NetworkUtils.cjs');
+
 class Validation {
   constructor(logger) {
     this.logger = logger;
@@ -41,8 +44,9 @@ class Validation {
 
     // Проверка порта
     if (profile.port !== undefined) {
-      if (!Number.isInteger(profile.port) || profile.port < 1 || profile.port > 65535) {
-        errors.push('Port must be an integer between 1 and 65535');
+      const portValidation = NetworkUtils.validatePort(profile.port);
+      if (!portValidation.valid) {
+        errors.push(portValidation.error);
       }
     }
 
@@ -142,25 +146,17 @@ class Validation {
     
     const errors = [];
     
-    if (!url || typeof url !== 'string') {
-      errors.push('URL must be a non-empty string');
+    const validation = NetworkUtils.validateUrl(url);
+    
+    if (!validation.valid) {
+      errors.push(validation.error);
       return { valid: false, errors };
     }
 
-    try {
-      const parsed = new URL(url);
-      
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        errors.push('Only HTTP and HTTPS protocols are allowed');
-      }
-      
-      if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
-        this.stats.warnings++;
-        this.logger.warn('Local URL detected', { url });
-      }
-      
-    } catch (error) {
-      errors.push('Invalid URL format');
+    // Предупреждение для localhost
+    if (validation.isLocal) {
+      this.stats.warnings++;
+      this.logger.warn('Local URL detected', { url });
     }
 
     const valid = errors.length === 0;
@@ -225,8 +221,8 @@ class Validation {
     }
 
     // Проверка длины
-    if (tableName.length > 63) {
-      errors.push('Table name must be 63 characters or less');
+    if (tableName.length > Constants.LIMITS.MAX_TABLE_NAME_LENGTH) {
+      errors.push(`Table name must be ${Constants.LIMITS.MAX_TABLE_NAME_LENGTH} characters or less`);
     }
 
     const valid = errors.length === 0;
@@ -244,8 +240,8 @@ class Validation {
     const errors = [];
     
     if (limit !== undefined) {
-      if (!Number.isInteger(limit) || limit < 1 || limit > 10000) {
-        errors.push('Limit must be an integer between 1 and 10000');
+      if (!Number.isInteger(limit) || limit < Constants.LIMITS.MIN_QUERY_LIMIT || limit > Constants.LIMITS.MAX_QUERY_LIMIT) {
+        errors.push(`Limit must be an integer between ${Constants.LIMITS.MIN_QUERY_LIMIT} and ${Constants.LIMITS.MAX_QUERY_LIMIT}`);
       }
     }
 
@@ -271,4 +267,4 @@ function createValidation(logger) {
   return new Validation(logger);
 }
 
-module.exports = { createValidation, Validation }; 
+module.exports = Validation; 

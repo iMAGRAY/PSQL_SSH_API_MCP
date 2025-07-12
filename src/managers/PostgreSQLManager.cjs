@@ -6,6 +6,7 @@
  */
 
 const { Pool } = require('pg');
+const Constants = require('../constants/Constants.cjs');
 
 class PostgreSQLManager {
   constructor(logger, security, validation, profileService) {
@@ -67,7 +68,7 @@ class PostgreSQLManager {
   // Настройка профиля подключения
   async setupProfile(profileName, params) {
     try {
-      const { host, port = 5432, username, password, database } = params;
+      const { host, port = Constants.NETWORK.POSTGRES_DEFAULT_PORT, username, password, database } = params;
       
       if (!host || !username || !password || !database) {
         throw new Error('Missing required parameters: host, username, password, database');
@@ -145,9 +146,9 @@ class PostgreSQLManager {
       user: profile.username,
       password: profile.password,
       database: profile.database,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      max: Constants.LIMITS.MAX_CONNECTIONS,
+      idleTimeoutMillis: Constants.TIMEOUTS.IDLE_TIMEOUT,
+      connectionTimeoutMillis: Constants.TIMEOUTS.CONNECTION_TIMEOUT,
     });
 
     // Обработка ошибок пула
@@ -174,7 +175,7 @@ class PostgreSQLManager {
       password: profile.password,
       database: profile.database,
       max: 1,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: Constants.TIMEOUTS.CONNECTION_TIMEOUT,
     });
 
     try {
@@ -195,7 +196,7 @@ class PostgreSQLManager {
   }
 
   // Выполнение SQL запроса
-  async executeQuery(profileName, sql, limit = 100) {
+  async executeQuery(profileName, sql, limit = Constants.LIMITS.DEFAULT_QUERY_LIMIT) {
     try {
       if (!sql || typeof sql !== 'string') {
         throw new Error('SQL query is required');
@@ -241,7 +242,7 @@ class PostgreSQLManager {
     } catch (error) {
       this.logger.error('PostgreSQL query failed', { 
         profileName, 
-        sql: sql?.substring(0, 100), 
+        sql: sql?.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH), 
         error: error.message 
       });
       throw error;
@@ -315,7 +316,7 @@ class PostgreSQLManager {
   }
 
   // Получить образец данных
-  async sampleData(profileName, tableName, limit = 10) {
+  async sampleData(profileName, tableName, limit = Constants.LIMITS.SAMPLE_DATA_LIMIT) {
     if (!tableName) {
       throw new Error('Table name is required');
     }
@@ -530,4 +531,4 @@ function createPostgreSQLManager(logger, security, validation, profileService) {
   return new PostgreSQLManager(logger, security, validation, profileService);
 }
 
-module.exports = { createPostgreSQLManager, PostgreSQLManager }; 
+module.exports = PostgreSQLManager; 

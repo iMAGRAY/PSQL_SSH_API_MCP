@@ -1,8 +1,7 @@
 // 🔗 CONNECTION SERVICE
 // Централизованное управление подключениями
 
-const { TIMEOUTS, CONNECTION_LIMITS } = require('../constants/index.cjs');
-const logger = require('../logger/index.cjs');
+const Constants = require('../constants/Constants.cjs');
 
 class ConnectionService {
   constructor() {
@@ -137,12 +136,12 @@ class ConnectionService {
     
     const client = new Client({
       host: config.host,
-      port: config.port || 5432,
+      port: config.port || Constants.NETWORK.POSTGRES_DEFAULT_PORT,
       database: config.database,
       user: config.username,
       password: config.password,
-      connectionTimeoutMillis: TIMEOUTS.CONNECTION,
-      query_timeout: TIMEOUTS.QUERY,
+      connectionTimeoutMillis: Constants.TIMEOUTS.CONNECTION_TIMEOUT,
+      query_timeout: Constants.NETWORK.TIMEOUT_SSH_COMMAND,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
     });
 
@@ -164,7 +163,7 @@ class ConnectionService {
       const timeout = setTimeout(() => {
         conn.end();
         reject(new Error('Connection timeout'));
-      }, TIMEOUTS.SSH_CONNECT);
+      }, Constants.NETWORK.TIMEOUT_SSH_READY);
 
       conn.on('ready', () => {
         clearTimeout(timeout);
@@ -178,7 +177,7 @@ class ConnectionService {
 
       conn.connect({
         host: config.host,
-        port: config.port || 22,
+        port: config.port || Constants.NETWORK.SSH_DEFAULT_PORT,
         username: config.username,
         password: config.password
       });
@@ -194,7 +193,7 @@ class ConnectionService {
   }
 
   // Очистка неактивных подключений
-  cleanupInactiveConnections(maxAge = 300000) { // 5 минут
+  cleanupInactiveConnections(maxAge = Constants.NETWORK.TIMEOUT_IDLE) { // 5 минут
     const now = new Date();
     const toRemove = [];
 

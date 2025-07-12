@@ -248,4 +248,4 @@ function createProfileService(logger, security) {
   });
 }
 
-module.exports = { createProfileService, ProfileService }; 
+module.exports = ProfileService; 

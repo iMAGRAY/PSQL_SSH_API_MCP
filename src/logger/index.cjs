@@ -1,11 +1,11 @@
 // 📋 СИСТЕМА ЛОГГИРОВАНИЯ
 // Структурированное логгирование с уровнями и форматированием
 
-const { LOG_LEVELS } = require('../constants/index.cjs');
+const Constants = require('../constants/Constants.cjs');
 
 class Logger {
   constructor() {
-    this.level = process.env.LOG_LEVEL || LOG_LEVELS.INFO;
+    this.level = process.env.LOG_LEVEL || Constants.LOG_LEVELS.INFO;
     this.context = 'MCP-SERVER';
   }
 
@@ -38,26 +38,26 @@ class Logger {
 
   // Методы логгирования
   error(message, meta = {}) {
-    if (this.shouldLog(LOG_LEVELS.ERROR)) {
-      console.error(this.formatMessage(LOG_LEVELS.ERROR, message, meta));
+    if (this.shouldLog(Constants.LOG_LEVELS.ERROR)) {
+      process.stderr.write(this.formatMessage(Constants.LOG_LEVELS.ERROR, message, meta) + '\n');
     }
   }
 
   warn(message, meta = {}) {
-    if (this.shouldLog(LOG_LEVELS.WARN)) {
-      console.warn(this.formatMessage(LOG_LEVELS.WARN, message, meta));
+    if (this.shouldLog(Constants.LOG_LEVELS.WARN)) {
+      process.stderr.write(this.formatMessage(Constants.LOG_LEVELS.WARN, message, meta) + '\n');
     }
   }
 
   info(message, meta = {}) {
-    if (this.shouldLog(LOG_LEVELS.INFO)) {
-      console.log(this.formatMessage(LOG_LEVELS.INFO, message, meta));
+    if (this.shouldLog(Constants.LOG_LEVELS.INFO)) {
+      process.stdout.write(this.formatMessage(Constants.LOG_LEVELS.INFO, message, meta) + '\n');
     }
   }
 
   debug(message, meta = {}) {
-    if (this.shouldLog(LOG_LEVELS.DEBUG)) {
-      console.log(this.formatMessage(LOG_LEVELS.DEBUG, message, meta));
+    if (this.shouldLog(Constants.LOG_LEVELS.DEBUG)) {
+      process.stdout.write(this.formatMessage(Constants.LOG_LEVELS.DEBUG, message, meta) + '\n');
     }
   }
 
@@ -71,7 +71,7 @@ class Logger {
   }
 
   query(sql, duration, meta = {}) {
-    this.debug(`Query executed`, { sql: sql.substring(0, 100) + '...', duration, ...meta });
+    this.debug(`Query executed`, { sql: sql.substring(0, Constants.LIMITS.LOG_SUBSTRING_LENGTH) + '...', duration, ...meta });
   }
 
   security(event, meta = {}) {
