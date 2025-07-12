@@ -1,7 +1,7 @@
 {
   "name": "psql-ssh-api",
   "version": "4.0.0",
-  "description": "🚀 Компактный MCP сервер для PostgreSQL, REST API и SSH операций с защитой от уязвимостей",
+  "description": "🚀 Compact MCP server for PostgreSQL, REST API and SSH operations with security protection",
   "main": "simple_openmcp_server.cjs",
   "type": "commonjs",
   "scripts": {
@@ -59,12 +59,14 @@
     "src/",
     "package.json",
     "README.md",
+    "README_RU.md",
     "CHANGELOG.md",
     "LICENSE",
     "mcp_config.md",
     "FINAL_STATUS_v4.0.md",
     "EFFICIENCY_OPTIMIZATION_REPORT.md",
-    "NAME_OPTIMIZATION_RESULTS.md"
+    "NAME_OPTIMIZATION_RESULTS.md",
+    "CLEANUP_REPORT.md"
   ],
   "os": [
     "darwin",

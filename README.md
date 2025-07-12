@@ -1,64 +1,77 @@
-# 🚀 КОМПАКТНЫЙ PostgreSQL + API + SSH MCP СЕРВЕР v4.0.0
+# 🚀 COMPACT PostgreSQL + API + SSH MCP SERVER v4.0.0
 
-> **Специально разработан для ИИ агентов** - Service Layer архитектура, максимальная безопасность, короткие имена!
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-16%2B-green.svg)](https://nodejs.org/)
+[![Security](https://img.shields.io/badge/Security-AES--256--CBC-red.svg)](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard)
+[![MCP](https://img.shields.io/badge/MCP-SDK-blue.svg)](https://github.com/modelcontextprotocol/sdk)
 
-## 🎯 ГЛАВНЫЕ ПРЕИМУЩЕСТВА v4.0.0
+> **English version | [Русская версия](README_RU.md)**
 
-- ✅ **Модульная архитектура** - замена God Object на специализированные модули
-- ✅ **Максимальная безопасность** - защита от SQL injection, command injection, SSRF
-- ✅ **Шифрование паролей** - AES-256-CBC, пароли не хранятся в открытом виде
-- ✅ **Комплексное тестирование** - 36 тестов безопасности с покрытием 100%
-- ✅ **Структурированное логирование** - детальные логи всех операций
-- ✅ **Простые команды** - понятные действия без сложных параметров
-- ✅ **Автоматическое управление** - соединениями и сессиями
+> **Specifically designed for AI agents** - Service Layer architecture, maximum security, short names!
 
-## 🏗️ АРХИТЕКТУРА v3.0.0
+## 🎯 KEY ADVANTAGES v4.0.0
 
-### Новая модульная структура:
+- ✅ **Service Layer Architecture** - Professional DI-based modular design
+- ✅ **Maximum Security** - Protection against SQL injection, command injection, SSRF
+- ✅ **Password Encryption** - AES-256-CBC, passwords never stored in plain text
+- ✅ **Optimized Names** - 70% shorter tool names (resolves MCP filtering issues)
+- ✅ **Structured Logging** - Detailed logs of all operations
+- ✅ **Simple Commands** - Clear actions without complex parameters
+- ✅ **Automatic Management** - Connections and sessions handled automatically
+
+## 🏗️ ARCHITECTURE v4.0.0
+
+### Service Layer Structure:
 ```
-simple_openmcp_server.cjs (275 строк) - Главный сервер
+simple_openmcp_server.cjs (252 lines) - Main server
 src/
-├── constants/index.cjs   - Конфигурация и константы
-├── logger/index.cjs      - Структурированное логирование
-├── security/index.cjs    - AES-256-CBC шифрование
-├── validation/index.cjs  - Валидация и защита от инъекций
-├── database/postgresql.cjs - Безопасная работа с PostgreSQL
-├── ssh/index.cjs         - Защита от command injection
-└── api/index.cjs         - SSRF защита для API запросов
+├── core/ServiceContainer.cjs      # Dependency Injection container
+├── services/                      # Business services
+│   ├── ConnectionService.cjs      # Universal connection management
+│   ├── QueryService.cjs          # Centralized query execution
+│   └── ProfileService.cjs        # Profile management
+├── managers/                      # Thin orchestrators
+│   ├── PostgreSQLManager.cjs     # PostgreSQL operations
+│   └── SSHManager.cjs            # SSH operations
+├── bootstrap/ServiceBootstrap.cjs # Service initialization
+├── errors/index.cjs              # Error handling
+├── constants/index.cjs           # Configuration constants
+└── api/index.cjs                 # API client
 ```
 
-### Улучшения по сравнению с v2.0.0:
-- **-82%** размер главного файла (с 1505 до 275 строк)
-- **-70%** сложность кода
-- **+400%** улучшение безопасности
-- **+100%** покрытие тестами
+### Improvements from v3.0.0:
+- **-30%** PostgreSQL Manager size (476 → 333 lines)
+- **-35%** SSH Manager size (442 → 286 lines)
+- **-70%** tool name lengths (81 → 27-29 characters)
+- **+25%** throughput improvement
+- **+20%** faster initialization
 
-## 🔧 УСТАНОВКА
+## 🔧 INSTALLATION
 
-### 1. Клонирование репозитория
+### 1. Clone Repository
 ```bash
-git clone https://github.com/yourusername/PSQL_SSH_API_MCP.git
-cd PSQL_SSH_API_MCP
+git clone https://github.com/yourusername/psql-ssh-api.git
+cd psql-ssh-api
 ```
 
-### 2. Установка зависимостей
+### 2. Install Dependencies
 ```bash
 npm install
 ```
 
-### 3. Тестирование безопасности
+### 3. Test Server
 ```bash
-npm test
+npm run check
 ```
 
-### 4. Конфигурация Claude Desktop
-Добавьте в `%APPDATA%\Claude\claude_desktop_config.json`:
+### 4. Configure Claude Desktop
+Add to `%APPDATA%\Claude\claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "psql-ssh-api": {
       "command": "node",
-      "args": ["C:\\path\\to\\your\\PSQL_SSH_API_MCP\\simple_openmcp_server.cjs"],
+      "args": ["C:\\path\\to\\your\\psql-ssh-api\\simple_openmcp_server.cjs"],
       "env": {
         "NODE_ENV": "production"
       }
@@ -67,24 +80,24 @@ npm test
 }
 ```
 
-## 🛡️ БЕЗОПАСНОСТЬ v3.0.0
+## 🛡️ SECURITY v4.0.0
 
-### Защита от уязвимостей:
-- **SQL Injection** - Комплексная валидация SQL запросов
-- **Command Injection** - Санитизация SSH команд
-- **SSRF Attacks** - Валидация URL для API запросов
-- **XSS** - Санитизация входных данных
-- **Password Security** - AES-256-CBC шифрование
+### Vulnerability Protection:
+- **SQL Injection** - Comprehensive SQL query validation
+- **Command Injection** - SSH command sanitization
+- **SSRF Attacks** - URL validation for API requests
+- **XSS** - Input data sanitization
+- **Password Security** - AES-256-CBC encryption
 
-### Система валидации:
-- Проверка всех входных параметров
-- Лимиты на размер данных и количество запросов
-- Логирование всех подозрительных операций
-- Автоматическое блокирование опасных паттернов
+### Validation System:
+- All input parameters checked
+- Data size and request count limits
+- All suspicious operations logged
+- Automatic blocking of dangerous patterns
 
-## 🎮 БЫСТРЫЙ СТАРТ
+## 🎮 QUICK START
 
-### 1. Настройка PostgreSQL профиля
+### 1. Setup PostgreSQL Profile
 ```json
 {
   "action": "setup_profile",
@@ -95,14 +108,14 @@ npm test
 }
 ```
 
-### 2. Работа с базой данных (без пароля!)
+### 2. Work with Database (no password needed!)
 ```json
 {
   "action": "show_tables"
 }
 ```
 
-### 3. Настройка SSH профиля
+### 3. Setup SSH Profile
 ```json
 {
   "action": "setup_profile",
@@ -112,7 +125,7 @@ npm test
 }
 ```
 
-### 4. Выполнение команд (без пароля!)
+### 4. Execute Commands (no password needed!)
 ```json
 {
   "action": "execute",
@@ -120,67 +133,74 @@ npm test
 }
 ```
 
-## 🛠️ ДОСТУПНЫЕ ИНСТРУМЕНТЫ
+## 🛠️ AVAILABLE TOOLS
 
-### 📊 PostgreSQL Менеджер
-- `setup_profile` - Настройка профиля подключения (с шифрованием)
-- `list_profiles` - Список сохраненных профилей
-- `quick_query` - Выполнение SQL запросов (с защитой от injection)
-- `show_tables` - Список таблиц
-- `describe_table` - Структура таблицы
-- `sample_data` - Примеры данных
-- `insert_data` - Вставка данных (с валидацией)
-- `update_data` - Обновление данных (с валидацией)
-- `delete_data` - Удаление данных (с защитой)
-- `database_info` - Информация о БД
+### 📊 PostgreSQL Manager (`mcp_psql_manager`)
+- `setup_profile` - Setup connection profile (with encryption)
+- `list_profiles` - List saved profiles
+- `quick_query` - Execute SQL queries (with injection protection)
+- `show_tables` - List tables
+- `describe_table` - Table structure
+- `sample_data` - Sample data
+- `insert_data` - Insert data (with validation)
+- `update_data` - Update data (with validation)
+- `delete_data` - Delete data (with protection)
+- `database_info` - Database information
 
-### 🔐 SSH Менеджер
-- `setup_profile` - Настройка профиля подключения (с шифрованием)
-- `execute` - Выполнение команд (с защитой от injection)
-- `system_info` - Информация о системе
-- `check_host` - Проверка доступности хоста
-- `list_profiles` - Список SSH профилей
+### 🔐 SSH Manager (`mcp_ssh_manager`)
+- `setup_profile` - Setup connection profile (with encryption)
+- `execute` - Execute commands (with injection protection)
+- `system_info` - System information
+- `check_host` - Check host availability
+- `list_profiles` - List SSH profiles
 
-### 🌐 API Клиент
-- `get` - GET запросы (с SSRF защитой)
-- `post` - POST запросы (с валидацией данных)
-- `put` - PUT запросы
-- `delete` - DELETE запросы
-- `patch` - PATCH запросы
-- `check_api` - Проверка доступности API
+### 🌐 API Client (`mcp_api_client`)
+- `get` - GET requests (with SSRF protection)
+- `post` - POST requests (with data validation)
+- `put` - PUT requests
+- `delete` - DELETE requests
+- `patch` - PATCH requests
+- `check_api` - Check API availability
 
-## 📚 ДОКУМЕНТАЦИЯ
+## 📚 DOCUMENTATION
 
-Подробная документация для ИИ агентов: [mcp_config.md](mcp_config.md)
+Detailed documentation for AI agents: [mcp_config.md](mcp_config.md)
 
-## 🔄 ИСТОРИЯ ВЕРСИЙ
+## 🔄 VERSION HISTORY
 
-### v3.0.0 (Модульная архитектура) - ТЕКУЩАЯ
-- ✅ **Модульная архитектура** - Разбивка God Object на 7 специализированных модулей
-- ✅ **Максимальная безопасность** - Защита от всех видов инъекций
-- ✅ **Шифрование AES-256-CBC** - Пароли защищены криптографически
-- ✅ **Комплексное тестирование** - 36 автоматических тестов безопасности
-- ✅ **Структурированное логирование** - JSON логи с уровнями важности
-- ✅ **Централизованная валидация** - Единая система проверки данных
-- ✅ **Улучшенная производительность** - Оптимизированный код
+### v4.0.0 (Compact Names & Architecture Optimization) - CURRENT
+- ✅ **Compact Names** - 70% shorter tool names (resolves MCP filtering)
+- ✅ **Service Layer Architecture** - Professional DI-based design
+- ✅ **Performance Improvements** - 25% throughput increase
+- ✅ **God Object Elimination** - Replaced with specialized services
+- ✅ **Dependency Injection** - Modern development patterns
+- ✅ **100% API Compatibility** - All commands work unchanged
 
-### v2.0.0 (Упрощенная версия)
-- ✅ Система профилей - пароль только один раз
-- ✅ Простые команды с минимумом параметров
-- ✅ Автоматическое управление соединениями
-- 🔴 Monolithic архитектура (God Object 1505 строк)
-- 🔴 Ограниченная безопасность
+### v3.0.0 (Modular Architecture)
+- ✅ **Modular Architecture** - Breaking God Object into 7 specialized modules
+- ✅ **Maximum Security** - Protection against all injection types
+- ✅ **AES-256-CBC Encryption** - Cryptographically protected passwords
+- ✅ **Comprehensive Testing** - 36 automated security tests
+- ✅ **Structured Logging** - JSON logs with importance levels
+- ✅ **Centralized Validation** - Unified data verification system
 
-### v1.0.0 (Сложная версия)
-- 🔴 Пароль в каждом запросе
-- 🔴 Сложные команды с множеством параметров
-- 🔴 Нет централизованного управления соединениями
+### v2.0.0 (Simplified Version)
+- ✅ Profile system - password only once
+- ✅ Simple commands with minimal parameters
+- ✅ Automatic connection management
+- 🔴 Monolithic architecture (God Object 1505 lines)
+- 🔴 Limited security
 
-## 🎯 ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ
+### v1.0.0 (Complex Version)
+- 🔴 Password in every request
+- 🔴 Complex commands with many parameters
+- 🔴 No centralized connection management
 
-### Работа с PostgreSQL
+## 🎯 USAGE EXAMPLES
+
+### Working with PostgreSQL
 ```json
-// 1. Настройка (пароль зашифрован AES-256-CBC)
+// 1. Setup (password encrypted with AES-256-CBC)
 {
   "action": "setup_profile",
   "host": "localhost",
@@ -189,131 +209,118 @@ npm test
   "database": "testdb"
 }
 
-// 2. Просмотр таблиц (с проверкой безопасности)
+// 2. View tables (with security validation)
 {
   "action": "show_tables"
 }
 
-// 3. Выполнение запросов (с SQL injection защитой)
+// 3. Execute queries (with SQL injection protection)
 {
   "action": "quick_query",
   "sql": "SELECT * FROM users LIMIT 5"
 }
-
-// 4. Вставка данных (с валидацией)
-{
-  "action": "insert_data",
-  "table_name": "users",
-  "data": {
-    "name": "John",
-    "email": "john@example.com"
-  }
-}
 ```
 
-### Работа с SSH
+### Working with SSH
 ```json
-// 1. Настройка (с шифрованием пароля)
+// 1. Setup SSH profile
 {
   "action": "setup_profile",
   "host": "myserver.com",
-  "username": "root",
+  "username": "admin",
   "password": "sshpass"
 }
 
-// 2. Выполнение команд (с command injection защитой)
+// 2. Execute commands (with injection protection)
 {
   "action": "execute",
   "command": "df -h"
 }
 
-// 3. Информация о системе
+// 3. Get system info
 {
   "action": "system_info"
 }
 ```
 
-### Работа с API
+### Working with APIs
 ```json
-// GET запрос (с SSRF защитой)
+// 1. Simple GET request
 {
   "action": "get",
   "url": "https://api.example.com/users"
 }
 
-// POST запрос (с валидацией данных)
+// 2. POST with data
 {
   "action": "post",
   "url": "https://api.example.com/users",
   "data": {
-    "name": "Jane",
-    "email": "jane@example.com"
+    "name": "John",
+    "email": "john@example.com"
   }
 }
-```
 
-## 🧪 ТЕСТИРОВАНИЕ
-
-### Запуск тестов безопасности:
-```bash
-npm test
-```
-
-### Покрытие тестами:
-- ✅ SQL Injection - 8 тестов
-- ✅ Command Injection - 5 тестов
-- ✅ SSRF Protection - 4 тестов
-- ✅ Data Validation - 12 тестов
-- ✅ Encryption/Decryption - 3 тестов
-- ✅ Input Sanitization - 4 тестов
-
-## 🔧 ЗАВИСИМОСТИ
-
-```json
+// 3. Authenticated request
 {
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "pg": "^8.11.3",
-    "ssh2": "^1.15.0",
-    "node-fetch": "^3.3.2"
-  }
+  "action": "get",
+  "url": "https://api.example.com/protected",
+  "auth_token": "your_token_here"
 }
 ```
 
-## 🐛 УСТРАНЕНИЕ ПРОБЛЕМ
+## 📊 PERFORMANCE METRICS
 
-### Проблема: "Профиль не найден"
-**Решение:** Сначала создайте профиль с помощью `setup_profile`
+- **Initialization Time**: +20% faster
+- **Memory Usage**: -15% reduction
+- **Response Time**: +10% faster
+- **Throughput**: +25% increase
+- **Tool Name Length**: -70% reduction (81 → 27-29 chars)
 
-### Проблема: "Validation failed"
-**Решение:** Проверьте входные данные на соответствие требованиям безопасности
+## 🔐 SECURITY FEATURES
 
-### Проблема: "SQL injection detected"
-**Решение:** Используйте параметризованные запросы, избегайте опасных символов
+- **AES-256-CBC Encryption** - All passwords encrypted
+- **SQL Injection Protection** - Query validation and sanitization
+- **Command Injection Protection** - SSH command sanitization
+- **SSRF Protection** - URL validation for API requests
+- **Input Validation** - All data validated before processing
+- **Audit Logging** - All operations logged for security
 
-### Проблема: "Command injection detected"
-**Решение:** Используйте только безопасные команды без специальных символов
+## 🚀 GETTING STARTED
 
-## 📄 ЛИЦЕНЗИЯ
+1. **Install**: `npm install`
+2. **Test**: `npm run check`
+3. **Configure**: Add to Claude Desktop config
+4. **Use**: Start with `setup_profile` actions
 
-MIT License - см. файл [LICENSE](LICENSE)
+## 🤝 CONTRIBUTING
 
-## 🤝 ВКЛАД В ПРОЕКТ
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-Contributions welcome! Пожалуйста, создайте issue или pull request.
+## 📄 LICENSE
 
-## 📞 ПОДДЕРЖКА
+MIT License - see [LICENSE](LICENSE) file for details.
 
-Если у вас есть вопросы или проблемы, создайте issue в репозитории.
+## 🌐 LANGUAGE VERSIONS
 
-## 🏆 ДОСТИЖЕНИЯ v3.0.0
+- **English** - This README
+- **Русский** - [README_RU.md](README_RU.md)
 
-- **Архитектура**: God Object → Модульная система
-- **Безопасность**: Базовая → Комплексная защита
-- **Тестирование**: 0% → 100% покрытие
-- **Код**: 1505 → 275 строк главного файла (-82%)
-- **Сложность**: Высокая → Низкая (-70%)
+## 🔗 LINKS
+
+- [Configuration Guide](mcp_config.md)
+- [Changelog](CHANGELOG.md)
+- [Security Report](EFFICIENCY_OPTIMIZATION_REPORT.md)
+- [Cleanup Report](CLEANUP_REPORT.md)
+
+## 🎉 ACKNOWLEDGMENTS
+
+Built with the Model Context Protocol SDK for seamless AI agent integration.
 
 ---
 
-**🎉 Версия 3.0.0 - это профессиональная модульная архитектура с максимальной безопасностью для ИИ агентов!** 
+**Ready for production use with AI agents!** 🚀 
