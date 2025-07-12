@@ -7,19 +7,181 @@
 
 const { Client } = require('ssh2');
 
+// Класс для управления пулом SSH соединений
+class ConnectionPool {
+  constructor(maxConnections = 5, idleTimeout = 30000) {
+    this.pool = new Map(); // profileName -> connections[]
+    this.maxConnections = maxConnections;
+    this.idleTimeout = idleTimeout;
+    this.stats = {
+      created: 0,
+      reused: 0,
+      expired: 0
+    };
+  }
+
+  // Получение соединения из пула
+  async getConnection(profile) {
+    const key = `${profile.host}:${profile.port}:${profile.username}`;
+    
+    if (!this.pool.has(key)) {
+      this.pool.set(key, []);
+    }
+
+    const connections = this.pool.get(key);
+    
+    // Поиск свободного соединения
+    for (let i = 0; i < connections.length; i++) {
+      const connData = connections[i];
+      if (!connData.inUse && connData.conn._sock && !connData.conn._sock.destroyed) {
+        connData.inUse = true;
+        connData.lastUsed = Date.now();
+        this.stats.reused++;
+        return connData;
+      }
+    }
+
+    // Создание нового соединения если лимит не достигнут
+    if (connections.length < this.maxConnections) {
+      const connData = await this.createConnection(profile);
+      connData.inUse = true;
+      connData.lastUsed = Date.now();
+      connections.push(connData);
+      this.stats.created++;
+      return connData;
+    }
+
+    // Ждём освобождения соединения
+    throw new Error('Connection pool exhausted');
+  }
+
+  // Создание нового соединения
+  async createConnection(profile) {
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
+      let timeoutId = null;
+      
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      };
+      
+      timeoutId = setTimeout(() => {
+        cleanup();
+        conn.end();
+        reject(new Error('Connection timeout'));
+      }, 10000);
+
+      conn.on('ready', () => {
+        cleanup();
+        resolve({
+          conn,
+          inUse: false,
+          lastUsed: Date.now(),
+          created: Date.now()
+        });
+      });
+
+      conn.on('error', (err) => {
+        cleanup();
+        reject(err);
+      });
+
+      conn.connect({
+        host: profile.host,
+        port: profile.port,
+        username: profile.username,
+        password: profile.password,
+        readyTimeout: 10000
+      });
+    });
+  }
+
+  // Освобождение соединения
+  releaseConnection(profile, connData) {
+    connData.inUse = false;
+    connData.lastUsed = Date.now();
+  }
+
+  // Очистка устаревших соединений
+  cleanupExpiredConnections() {
+    const now = Date.now();
+    
+    for (const [key, connections] of this.pool) {
+      for (let i = connections.length - 1; i >= 0; i--) {
+        const connData = connections[i];
+        
+        if (!connData.inUse && (now - connData.lastUsed) > this.idleTimeout) {
+          try {
+            connData.conn.end();
+            connections.splice(i, 1);
+            this.stats.expired++;
+          } catch (error) {
+            // Игнорируем ошибки при закрытии
+          }
+        }
+      }
+      
+      // Удаляем пустые пулы
+      if (connections.length === 0) {
+        this.pool.delete(key);
+      }
+    }
+  }
+
+  // Полная очистка пула
+  async cleanup() {
+    for (const [key, connections] of this.pool) {
+      for (const connData of connections) {
+        try {
+          connData.conn.end();
+        } catch (error) {
+          // Игнорируем ошибки при закрытии
+        }
+      }
+    }
+    this.pool.clear();
+  }
+
+  // Статистика пула
+  getStats() {
+    let totalConnections = 0;
+    let activeConnections = 0;
+    
+    for (const connections of this.pool.values()) {
+      totalConnections += connections.length;
+      activeConnections += connections.filter(c => c.inUse).length;
+    }
+    
+    return {
+      ...this.stats,
+      totalConnections,
+      activeConnections,
+      poolSize: this.pool.size
+    };
+  }
+}
+
 class SSHManager {
   constructor(logger, security, validation, profileService) {
     this.logger = logger;
     this.security = security;
     this.validation = validation;
     this.profileService = profileService;
-    this.connections = new Map();
+    this.connectionPool = new ConnectionPool();
     this.stats = {
       commands: 0,
       connections: 0,
       errors: 0,
       profiles_created: 0
     };
+
+    // Автоматическая очистка каждые 5 минут
+    this.cleanupInterval = setInterval(() => {
+      this.connectionPool.cleanupExpiredConnections();
+    }, 5 * 60 * 1000);
   }
 
   // Обработка всех действий SSH
@@ -122,28 +284,75 @@ class SSHManager {
 
   // Тестирование подключения
   async testConnection(profile) {
-    return new Promise((resolve, reject) => {
-      const conn = new Client();
+    try {
+      const connData = await this.connectionPool.getConnection(profile);
       
-      const timeout = setTimeout(() => {
-        conn.end();
-        reject(new Error('Connection timeout'));
-      }, 10000);
-
-      conn.on('ready', () => {
-        clearTimeout(timeout);
-        
-        // Простая проверка команды
-        conn.exec('echo "test"', (err, stream) => {
+      // Простая проверка команды
+      return new Promise((resolve, reject) => {
+        connData.conn.exec('echo "test"', (err, stream) => {
           if (err) {
-            conn.end();
+            this.connectionPool.releaseConnection(profile, connData);
             reject(err);
             return;
           }
           
           stream.on('close', () => {
-            conn.end();
+            this.connectionPool.releaseConnection(profile, connData);
             resolve();
+          });
+          
+          stream.on('error', (err) => {
+            this.connectionPool.releaseConnection(profile, connData);
+            reject(err);
+          });
+          
+          stream.on('data', () => {
+            // Данные получены, тест успешен
+          });
+        });
+      });
+    } catch (error) {
+      // Fallback на прямое соединение если пул недоступен
+      return this.testConnectionDirect(profile);
+    }
+  }
+
+  // Прямое тестирование подключения (fallback)
+  async testConnectionDirect(profile) {
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
+      let timeoutId = null;
+      
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        conn.end();
+      };
+      
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Connection timeout'));
+      }, 10000);
+
+      conn.on('ready', () => {
+        // Простая проверка команды
+        conn.exec('echo "test"', (err, stream) => {
+          if (err) {
+            cleanup();
+            reject(err);
+            return;
+          }
+          
+          stream.on('close', () => {
+            cleanup();
+            resolve();
+          });
+          
+          stream.on('error', (err) => {
+            cleanup();
+            reject(err);
           });
           
           stream.on('data', () => {
@@ -153,7 +362,7 @@ class SSHManager {
       });
 
       conn.on('error', (err) => {
-        clearTimeout(timeout);
+        cleanup();
         reject(err);
       });
 
@@ -210,21 +419,15 @@ class SSHManager {
     }
   }
 
-  // Выполнение команды через SSH
+  // Выполнение команды через SSH с пулом соединений
   async runCommand(profile, command) {
-    return new Promise((resolve, reject) => {
-      const conn = new Client();
+    try {
+      const connData = await this.connectionPool.getConnection(profile);
       
-      const timeout = setTimeout(() => {
-        conn.end();
-        reject(new Error('Command execution timeout'));
-      }, 30000);
-
-      conn.on('ready', () => {
-        conn.exec(command, (err, stream) => {
+      return new Promise((resolve, reject) => {
+        connData.conn.exec(command, (err, stream) => {
           if (err) {
-            clearTimeout(timeout);
-            conn.end();
+            this.connectionPool.releaseConnection(profile, connData);
             reject(err);
             return;
           }
@@ -234,8 +437,7 @@ class SSHManager {
           let exitCode = null;
 
           stream.on('close', (code) => {
-            clearTimeout(timeout);
-            conn.end();
+            this.connectionPool.releaseConnection(profile, connData);
             exitCode = code;
             
             resolve({
@@ -243,6 +445,73 @@ class SSHManager {
               stderr: stderr.trim(),
               exitCode
             });
+          });
+
+          stream.on('error', (err) => {
+            this.connectionPool.releaseConnection(profile, connData);
+            reject(err);
+          });
+
+          stream.on('data', (data) => {
+            stdout += data.toString();
+          });
+
+          stream.stderr.on('data', (data) => {
+            stderr += data.toString();
+          });
+        });
+      });
+    } catch (error) {
+      // Fallback на прямое соединение если пул недоступен
+      return this.runCommandDirect(profile, command);
+    }
+  }
+
+  // Прямое выполнение команды (fallback)
+  async runCommandDirect(profile, command) {
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
+      let timeoutId = null;
+      
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        conn.end();
+      };
+      
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Command execution timeout'));
+      }, 30000);
+
+      conn.on('ready', () => {
+        conn.exec(command, (err, stream) => {
+          if (err) {
+            cleanup();
+            reject(err);
+            return;
+          }
+
+          let stdout = '';
+          let stderr = '';
+          let exitCode = null;
+
+          stream.on('close', (code) => {
+            cleanup();
+            exitCode = code;
+            
+            resolve({
+              stdout: stdout.trim(),
+              stderr: stderr.trim(),
+              exitCode
+            });
+          });
+
+          stream.on('error', (err) => {
+            cleanup();
+            reject(err);
           });
 
           stream.on('data', (data) => {
@@ -256,7 +525,7 @@ class SSHManager {
       });
 
       conn.on('error', (err) => {
-        clearTimeout(timeout);
+        cleanup();
         reject(err);
       });
 
@@ -363,27 +632,21 @@ class SSHManager {
   getStats() {
     return {
       ...this.stats,
-      active_connections: this.connections.size
+      active_connections: this.connectionPool.getStats().activeConnections
     };
   }
 
   // Очистка ресурсов
   async cleanup() {
     try {
-      // Закрытие всех подключений
-      for (const [profileName, connection] of this.connections) {
-        try {
-          connection.end();
-          this.logger.debug('SSH connection closed', { profileName });
-        } catch (error) {
-          this.logger.warn('Failed to close SSH connection', { 
-            profileName, 
-            error: error.message 
-          });
-        }
+      // Очистка интервала автоматической очистки
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
       }
       
-      this.connections.clear();
+      // Закрытие всех подключений
+      await this.connectionPool.cleanup();
       this.logger.info('SSH manager cleaned up');
       
     } catch (error) {

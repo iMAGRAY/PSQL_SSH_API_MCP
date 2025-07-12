@@ -14,6 +14,8 @@ class APIManager {
     this.logger = logger;
     this.security = security;
     this.validation = validation;
+    
+    // Базовая статистика (аккумуляторы)
     this.stats = {
       requests: 0,
       get_requests: 0,
@@ -22,6 +24,85 @@ class APIManager {
       delete_requests: 0,
       patch_requests: 0,
       errors: 0
+    };
+    
+    // Скользящее окно для детальной статистики
+    this.slidingWindow = {
+      windowSize: 1000,      // Размер окна (количество запросов)
+      maxAge: 3600000,       // Максимальный возраст записи (1 час)
+      requests: [],          // Массив запросов с timestamp
+      currentIndex: 0
+    };
+    
+    // Интервал очистки старых записей (каждые 5 минут)
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupOldRecords();
+    }, 5 * 60 * 1000);
+  }
+
+  // Добавление записи в скользящее окно
+  addToSlidingWindow(type, success = true) {
+    const now = Date.now();
+    const record = {
+      timestamp: now,
+      type,
+      success
+    };
+    
+    // Круговая замена в фиксированном массиве
+    if (this.slidingWindow.requests.length < this.slidingWindow.windowSize) {
+      this.slidingWindow.requests.push(record);
+    } else {
+      this.slidingWindow.requests[this.slidingWindow.currentIndex] = record;
+      this.slidingWindow.currentIndex = (this.slidingWindow.currentIndex + 1) % this.slidingWindow.windowSize;
+    }
+  }
+
+  // Очистка устаревших записей
+  cleanupOldRecords() {
+    const now = Date.now();
+    const cutoff = now - this.slidingWindow.maxAge;
+    
+    this.slidingWindow.requests = this.slidingWindow.requests.filter(
+      record => record.timestamp > cutoff
+    );
+    
+    // Обновление индекса
+    if (this.slidingWindow.currentIndex >= this.slidingWindow.requests.length) {
+      this.slidingWindow.currentIndex = 0;
+    }
+    
+    this.logger.debug('Cleaned up old API records', {
+      remaining: this.slidingWindow.requests.length,
+      windowSize: this.slidingWindow.windowSize
+    });
+  }
+
+  // Получение статистики скользящего окна
+  getSlidingWindowStats() {
+    const now = Date.now();
+    const oneHourAgo = now - 3600000;
+    const oneMinuteAgo = now - 60000;
+    
+    const recentRequests = this.slidingWindow.requests.filter(r => r.timestamp > oneHourAgo);
+    const lastMinuteRequests = this.slidingWindow.requests.filter(r => r.timestamp > oneMinuteAgo);
+    
+    return {
+      last_hour: {
+        total: recentRequests.length,
+        successful: recentRequests.filter(r => r.success).length,
+        failed: recentRequests.filter(r => !r.success).length,
+        get: recentRequests.filter(r => r.type === 'GET').length,
+        post: recentRequests.filter(r => r.type === 'POST').length,
+        put: recentRequests.filter(r => r.type === 'PUT').length,
+        delete: recentRequests.filter(r => r.type === 'DELETE').length,
+        patch: recentRequests.filter(r => r.type === 'PATCH').length
+      },
+      last_minute: {
+        total: lastMinuteRequests.length,
+        successful: lastMinuteRequests.filter(r => r.success).length,
+        failed: lastMinuteRequests.filter(r => !r.success).length
+      }
     };
   }
 
@@ -50,6 +131,7 @@ class APIManager {
       }
     } catch (error) {
       this.stats.errors++;
+      this.addToSlidingWindow(action?.toUpperCase() || 'UNKNOWN', false);
       this.logger.error('API action failed', { 
         action, 
         url: url?.substring(0, 100), 
@@ -66,6 +148,7 @@ class APIManager {
       
       this.stats.get_requests++;
       this.stats.requests++;
+      this.addToSlidingWindow('GET');
       
       const requestHeaders = this.prepareHeaders(headers, auth_token);
       const response = await this.makeRequest('GET', url, null, requestHeaders);
@@ -85,6 +168,7 @@ class APIManager {
       };
       
     } catch (error) {
+      this.addToSlidingWindow('GET', false);
       this.logger.error('GET request failed', { 
         url: url?.substring(0, 100), 
         error: error.message 
@@ -100,6 +184,7 @@ class APIManager {
       
       this.stats.post_requests++;
       this.stats.requests++;
+      this.addToSlidingWindow('POST');
       
       const requestHeaders = this.prepareHeaders(headers, auth_token);
       const response = await this.makeRequest('POST', url, data, requestHeaders);
@@ -119,6 +204,7 @@ class APIManager {
       };
       
     } catch (error) {
+      this.addToSlidingWindow('POST', false);
       this.logger.error('POST request failed', { 
         url: url?.substring(0, 100), 
         error: error.message 
@@ -134,6 +220,7 @@ class APIManager {
       
       this.stats.put_requests++;
       this.stats.requests++;
+      this.addToSlidingWindow('PUT');
       
       const requestHeaders = this.prepareHeaders(headers, auth_token);
       const response = await this.makeRequest('PUT', url, data, requestHeaders);
@@ -153,6 +240,7 @@ class APIManager {
       };
       
     } catch (error) {
+      this.addToSlidingWindow('PUT', false);
       this.logger.error('PUT request failed', { 
         url: url?.substring(0, 100), 
         error: error.message 
@@ -168,6 +256,7 @@ class APIManager {
       
       this.stats.delete_requests++;
       this.stats.requests++;
+      this.addToSlidingWindow('DELETE');
       
       const requestHeaders = this.prepareHeaders(headers, auth_token);
       const response = await this.makeRequest('DELETE', url, null, requestHeaders);
@@ -187,6 +276,7 @@ class APIManager {
       };
       
     } catch (error) {
+      this.addToSlidingWindow('DELETE', false);
       this.logger.error('DELETE request failed', { 
         url: url?.substring(0, 100), 
         error: error.message 
@@ -202,6 +292,7 @@ class APIManager {
       
       this.stats.patch_requests++;
       this.stats.requests++;
+      this.addToSlidingWindow('PATCH');
       
       const requestHeaders = this.prepareHeaders(headers, auth_token);
       const response = await this.makeRequest('PATCH', url, data, requestHeaders);
@@ -221,6 +312,7 @@ class APIManager {
       };
       
     } catch (error) {
+      this.addToSlidingWindow('PATCH', false);
       this.logger.error('PATCH request failed', { 
         url: url?.substring(0, 100), 
         error: error.message 
@@ -412,14 +504,34 @@ class APIManager {
     });
   }
 
-  // Получение статистики
+  // Получение статистики с дополнительными метриками
   getStats() {
-    return { ...this.stats };
+    const slidingStats = this.getSlidingWindowStats();
+    
+    return {
+      total_stats: { ...this.stats },
+      sliding_window: slidingStats,
+      memory_usage: {
+        window_size: this.slidingWindow.requests.length,
+        max_window_size: this.slidingWindow.windowSize,
+        memory_efficiency: `${((this.slidingWindow.requests.length / this.slidingWindow.windowSize) * 100).toFixed(1)}%`
+      }
+    };
   }
 
   // Очистка ресурсов
   async cleanup() {
     try {
+      // Очистка интервала
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+      }
+      
+      // Очистка скользящего окна
+      this.slidingWindow.requests = [];
+      this.slidingWindow.currentIndex = 0;
+      
       this.logger.info('API manager cleaned up');
     } catch (error) {
       this.logger.error('Failed to cleanup API manager', { error: error.message });

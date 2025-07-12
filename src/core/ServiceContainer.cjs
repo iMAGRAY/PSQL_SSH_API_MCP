@@ -24,9 +24,10 @@ class ServiceContainer {
       throw new Error(`Service '${name}' not found`);
     }
 
-    // Singleton pattern
+    // Singleton pattern с ленивой инициализацией
     if (service.singleton) {
       if (!this.singletons.has(name)) {
+        logger.debug(`Lazy loading singleton: ${name}`);
         this.singletons.set(name, service.factory(this));
       }
       return this.singletons.get(name);
@@ -41,29 +42,23 @@ class ServiceContainer {
     return this.services.has(name);
   }
 
-  // Инициализация всех сервисов
+  // Инициализация контейнера (без принудительной загрузки сервисов)
   async initialize() {
     if (this.initialized) return;
 
     logger.info('Initializing Service Container...');
     
-    // Инициализация критических сервисов
+    // Проверяем только доступность критических сервисов
     const criticalServices = ['config', 'logger', 'security', 'validation'];
     
     for (const serviceName of criticalServices) {
-      if (this.has(serviceName)) {
-        try {
-          this.get(serviceName);
-          logger.debug(`Service initialized: ${serviceName}`);
-        } catch (error) {
-          logger.error(`Failed to initialize service: ${serviceName}`, { error: error.message });
-          throw error;
-        }
+      if (!this.has(serviceName)) {
+        logger.warn(`Critical service not registered: ${serviceName}`);
       }
     }
 
     this.initialized = true;
-    logger.info('Service Container initialized successfully');
+    logger.info('Service Container initialized successfully (lazy loading enabled)');
   }
 
   // Получение всех зарегистрированных сервисов

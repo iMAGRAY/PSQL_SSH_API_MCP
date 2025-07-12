@@ -12,10 +12,28 @@ class Security {
     this.logger = logger;
     this.algorithm = 'aes-256-cbc';
     this.secretKey = process.env.ENCRYPTION_KEY || this.generateSecretKey();
+    
+    // Строгие лимиты безопасности
+    this.limits = {
+      maxDataSize: 1024 * 1024, // 1MB максимальный размер данных
+      maxPasswordLength: 128,    // Максимальная длина пароля
+      maxUrlLength: 2048,        // Максимальная длина URL
+      maxTableNameLength: 63,    // Максимальная длина имени таблицы
+      maxCommandLength: 1024,    // Максимальная длина команды
+      pbkdf2Iterations: 100000,  // Безопасное количество итераций
+      rateLimitWindow: 60000,    // Окно для rate limiting (1 минута)
+      rateLimitMaxRequests: 100  // Максимум запросов в окне
+    };
+    
+    // Rate limiting
+    this.rateLimiter = new Map();
+    
     this.stats = {
       encryptions: 0,
       decryptions: 0,
-      validations: 0
+      validations: 0,
+      rateLimitHits: 0,
+      sizeLimitHits: 0
     };
   }
 
@@ -26,9 +44,48 @@ class Security {
     return key;
   }
 
+  // Проверка rate limiting
+  checkRateLimit(identifier = 'default') {
+    const now = Date.now();
+    const windowStart = now - this.limits.rateLimitWindow;
+    
+    if (!this.rateLimiter.has(identifier)) {
+      this.rateLimiter.set(identifier, []);
+    }
+    
+    const requests = this.rateLimiter.get(identifier);
+    
+    // Очистка старых запросов
+    while (requests.length > 0 && requests[0] < windowStart) {
+      requests.shift();
+    }
+    
+    // Проверка лимита
+    if (requests.length >= this.limits.rateLimitMaxRequests) {
+      this.stats.rateLimitHits++;
+      throw new Error('Rate limit exceeded');
+    }
+    
+    requests.push(now);
+    return true;
+  }
+
+  // Проверка размера данных
+  validateDataSize(data, maxSize = this.limits.maxDataSize) {
+    const size = Buffer.byteLength(data, 'utf8');
+    if (size > maxSize) {
+      this.stats.sizeLimitHits++;
+      throw new Error(`Data size limit exceeded: ${size} > ${maxSize}`);
+    }
+    return true;
+  }
+
   // Шифрование данных
   encrypt(text) {
     try {
+      this.checkRateLimit('encrypt');
+      this.validateDataSize(text);
+      
       this.stats.encryptions++;
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv(this.algorithm, this.secretKey, iv);
@@ -44,6 +101,9 @@ class Security {
   // Расшифровка данных
   decrypt(encryptedText) {
     try {
+      this.checkRateLimit('decrypt');
+      this.validateDataSize(encryptedText);
+      
       this.stats.decryptions++;
       const parts = encryptedText.split(':');
       if (parts.length !== 2) {
@@ -64,15 +124,23 @@ class Security {
     }
   }
 
-  // Хеширование пароля
+  // Хеширование пароля с усиленными параметрами
   hashPassword(password) {
-    const salt = crypto.randomBytes(16);
-    const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512');
+    if (password.length > this.limits.maxPasswordLength) {
+      throw new Error('Password too long');
+    }
+    
+    const salt = crypto.randomBytes(32); // Увеличенный размер соли
+    const hash = crypto.pbkdf2Sync(password, salt, this.limits.pbkdf2Iterations, 64, 'sha512');
     return salt.toString('hex') + ':' + hash.toString('hex');
   }
 
-  // Проверка пароля
+  // Проверка пароля с защитой от timing attacks
   verifyPassword(password, hashedPassword) {
+    if (password.length > this.limits.maxPasswordLength) {
+      return false;
+    }
+    
     const parts = hashedPassword.split(':');
     if (parts.length !== 2) {
       return false;
@@ -80,14 +148,18 @@ class Security {
     
     const salt = Buffer.from(parts[0], 'hex');
     const hash = Buffer.from(parts[1], 'hex');
-    const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512');
+    const verifyHash = crypto.pbkdf2Sync(password, salt, this.limits.pbkdf2Iterations, 64, 'sha512');
     
     return crypto.timingSafeEqual(hash, verifyHash);
   }
 
-  // Валидация URL (защита от SSRF)
+  // Валидация URL (защита от SSRF) с усиленными проверками
   validateUrl(url) {
     this.stats.validations++;
+    
+    if (url.length > this.limits.maxUrlLength) {
+      throw new Error('URL too long');
+    }
     
     try {
       const parsed = new URL(url);
@@ -107,6 +179,12 @@ class Security {
         throw new Error('Private IP addresses not allowed');
       }
       
+      // Проверка на опасные порты
+      const dangerousPorts = [22, 23, 25, 53, 135, 139, 445, 593, 636, 993, 995];
+      if (dangerousPorts.includes(parsed.port)) {
+        throw new Error('Dangerous port not allowed');
+      }
+      
       return true;
     } catch (error) {
       this.logger.warn('URL validation failed', { url, error: error.message });
@@ -114,40 +192,79 @@ class Security {
     }
   }
 
-  // Санитизация SQL (базовая защита)
+  // Санитизация SQL (усиленная защита)
   sanitizeSql(input) {
     if (typeof input !== 'string') {
       return input;
     }
     
-    // Удаление опасных символов
-    return input.replace(/[;'"`\\]/g, '');
+    if (input.length > this.limits.maxDataSize) {
+      throw new Error('SQL input too long');
+    }
+    
+    // Удаление опасных символов и SQL ключевых слов
+    let sanitized = input.replace(/[;'"`\\]/g, '');
+    
+    // Проверка на SQL injection keywords
+    const sqlKeywords = /\b(DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE|UNION|SELECT)\b/gi;
+    if (sqlKeywords.test(sanitized)) {
+      throw new Error('SQL keywords not allowed');
+    }
+    
+    return sanitized;
   }
 
-  // Санитизация команд shell
+  // Санитизация команд shell (усиленная защита)
   sanitizeCommand(command) {
     if (typeof command !== 'string') {
       return command;
     }
     
+    if (command.length > this.limits.maxCommandLength) {
+      throw new Error('Command too long');
+    }
+    
     // Удаление опасных символов
     const dangerous = /[;&|`$(){}[\]<>]/g;
-    return command.replace(dangerous, '');
+    let sanitized = command.replace(dangerous, '');
+    
+    // Проверка на опасные команды
+    const dangerousCommands = /\b(rm|del|format|fdisk|mkfs|dd|wget|curl|nc|netcat|telnet|ssh|ftp|tftp)\b/gi;
+    if (dangerousCommands.test(sanitized)) {
+      throw new Error('Dangerous command not allowed');
+    }
+    
+    return sanitized;
   }
 
-  // Проверка имени таблицы
+  // Проверка имени таблицы с усиленной валидацией
   validateTableName(tableName) {
     if (typeof tableName !== 'string') {
       return false;
     }
     
+    if (tableName.length > this.limits.maxTableNameLength) {
+      return false;
+    }
+    
     // Только буквы, цифры и подчеркивания
     const validPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-    return validPattern.test(tableName) && tableName.length <= 63;
+    
+    // Проверка на SQL ключевые слова
+    const sqlKeywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TABLE', 'INDEX', 'VIEW'];
+    const upperTableName = tableName.toUpperCase();
+    
+    return validPattern.test(tableName) && 
+           !sqlKeywords.includes(upperTableName) &&
+           tableName.length >= 1;
   }
 
   getStats() {
-    return { ...this.stats };
+    return { 
+      ...this.stats,
+      rateLimiterSize: this.rateLimiter.size,
+      limits: this.limits
+    };
   }
 
   async cleanup() {
@@ -155,6 +272,9 @@ class Security {
     if (this.secretKey) {
       this.secretKey.fill(0);
     }
+    
+    // Очистка rate limiter
+    this.rateLimiter.clear();
   }
 }
 
