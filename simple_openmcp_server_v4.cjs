@@ -19,7 +19,7 @@ class MCPServer {
   constructor() {
     this.server = new Server(
       {
-        name: 'psql-ssh-api',
+        name: 'postgresql-api-ssh-mcp-server',
         version: '4.0.0',
       },
       {
@@ -58,7 +58,7 @@ class MCPServer {
       return {
         tools: [
           {
-            name: 'mcp_psql_manager',
+            name: 'mcp_postgresql-api-ssh-mcp-server_postgresql_manager',
             description: '🐘 PostgreSQL Manager - безопасные операции с базой данных: setup_profile, list_profiles, quick_query, show_tables, describe_table, sample_data, insert_data, update_data, delete_data, database_info. Шифрование AES-256-CBC, защита от SQL injection, валидация входных данных.',
             inputSchema: {
               type: 'object',
@@ -84,7 +84,7 @@ class MCPServer {
             }
           },
           {
-            name: 'mcp_ssh_manager',
+            name: 'mcp_postgresql-api-ssh-mcp-server_ssh_manager',
             description: '🔐 SSH Manager - безопасные SSH операции: setup_profile, list_profiles, execute, system_info, check_host. Защита от command injection, санитизация команд, ограничения безопасности.',
             inputSchema: {
               type: 'object',
@@ -105,7 +105,7 @@ class MCPServer {
             }
           },
           {
-            name: 'mcp_api_client',
+            name: 'mcp_postgresql-api-ssh-mcp-server_universal_api_client',
             description: '🌐 API Client - безопасные HTTP запросы: get, post, put, delete, patch, check_api. Валидация URL, санитизация заголовков, защита от SSRF, ограничения размера данных.',
             inputSchema: {
               type: 'object',
@@ -135,13 +135,13 @@ class MCPServer {
         let result;
 
         switch (name) {
-          case 'mcp_psql_manager':
+          case 'mcp_postgresql-api-ssh-mcp-server_postgresql_manager':
             result = await this.handlePostgreSQL(args);
             break;
-          case 'mcp_ssh_manager':
+          case 'mcp_postgresql-api-ssh-mcp-server_ssh_manager':
             result = await this.handleSSH(args);
             break;
-          case 'mcp_api_client':
+          case 'mcp_postgresql-api-ssh-mcp-server_universal_api_client':
             result = await this.handleAPI(args);
             break;
           default:

@@ -1,7 +1,7 @@
 {
-  "name": "postgresql-api-ssh-mcp-server",
-  "version": "3.0.0",
-  "description": "🚀 Модульный MCP сервер для PostgreSQL, REST API и SSH операций с защитой от уязвимостей",
+  "name": "psql-ssh-api",
+  "version": "4.0.0",
+  "description": "🚀 Компактный MCP сервер для PostgreSQL, REST API и SSH операций с защитой от уязвимостей",
   "main": "simple_openmcp_server.cjs",
   "type": "commonjs",
   "scripts": {
@@ -51,12 +51,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-username/postgresql-api-ssh-mcp-server.git"
+    "url": "git+https://github.com/your-username/psql-ssh-api.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/postgresql-api-ssh-mcp-server/issues"
+    "url": "https://github.com/your-username/psql-ssh-api/issues"
   },
-  "homepage": "https://github.com/your-username/postgresql-api-ssh-mcp-server#readme",
+  "homepage": "https://github.com/your-username/psql-ssh-api#readme",
   "files": [
     "simple_openmcp_server.cjs",
     "src/",
