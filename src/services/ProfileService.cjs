@@ -1,300 +1,251 @@
-// 👤 PROFILE SERVICE  
-// Централизованное управление профилями подключений
+#!/usr/bin/env node
 
-const logger = require('../logger/index.cjs');
+/**
+ * 👤 PROFILE SERVICE
+ * Управление профилями подключения с шифрованием паролей
+ */
+
+const fs = require('fs').promises;
+const path = require('path');
 
 class ProfileService {
-  constructor(securityService, validationService) {
-    this.securityService = securityService;
-    this.validationService = validationService;
+  constructor(logger, security) {
+    this.logger = logger;
+    this.security = security;
     this.profiles = new Map();
-    this.profileStats = {
+    this.profilesFile = path.join(process.cwd(), 'profiles.json');
+    this.stats = {
       created: 0,
-      accessed: 0,
-      failed: 0
+      loaded: 0,
+      saved: 0,
+      errors: 0
     };
   }
 
-  // Создание профиля подключения
-  async createProfile(type, name, config) {
+  // Инициализация сервиса
+  async initialize() {
     try {
-      // Валидация конфигурации
-      this._validateProfileConfig(type, config);
-      
-      // Проверка безопасности
-      await this._validateSecurity(config);
-      
-      // Тестирование подключения
-      await this._testConnection(type, config);
-      
-      // Шифрование чувствительных данных
-      const encryptedConfig = await this._encryptSensitiveData(config);
-      
-      // Создание профиля
-      const profile = {
-        type,
-        name,
-        config: encryptedConfig,
-        metadata: {
-          createdAt: new Date(),
-          lastUsed: null,
-          accessCount: 0,
-          host: config.host,
-          port: config.port,
-          username: config.username
-        }
-      };
-      
-      const profileKey = `${type}_${name}`;
-      this.profiles.set(profileKey, profile);
-      this.profileStats.created++;
-      
-      logger.info(`Profile created: ${type}/${name}`, { 
-        host: config.host,
-        username: config.username 
-      });
-      
-      return {
-        success: true,
-        profile: {
-          type,
-          name,
-          host: config.host,
-          port: config.port,
-          createdAt: profile.metadata.createdAt
-        }
-      };
+      await this.loadProfiles();
+      this.logger.info('Profile service initialized');
     } catch (error) {
-      this.profileStats.failed++;
-      logger.error(`Failed to create profile: ${type}/${name}`, { error: error.message });
+      this.logger.error('Failed to initialize profile service', { error: error.message });
       throw error;
     }
   }
 
-  // Получение профиля с расшифровкой
-  async getProfile(type, name = 'default') {
-    const profileKey = `${type}_${name}`;
-    const profile = this.profiles.get(profileKey);
-    
-    if (!profile) {
-      throw new Error(`Profile '${name}' not found for type '${type}'`);
-    }
-    
+  // Загрузка профилей из файла
+  async loadProfiles() {
     try {
-      // Расшифровка чувствительных данных
-      const decryptedConfig = await this._decryptSensitiveData(profile.config);
+      const data = await fs.readFile(this.profilesFile, 'utf8');
+      const profiles = JSON.parse(data);
       
-      // Обновление метаданных
-      profile.metadata.lastUsed = new Date();
-      profile.metadata.accessCount++;
-      this.profileStats.accessed++;
+      for (const [name, profile] of Object.entries(profiles)) {
+        this.profiles.set(name, profile);
+      }
       
-      return {
-        type: profile.type,
-        name: profile.name,
-        config: decryptedConfig,
-        metadata: profile.metadata
-      };
+      this.stats.loaded = this.profiles.size;
+      this.logger.info(`Loaded ${this.profiles.size} profiles`);
+      
     } catch (error) {
-      this.profileStats.failed++;
-      logger.error(`Failed to decrypt profile: ${type}/${name}`, { error: error.message });
-      throw error;
-    }
-  }
-
-  // Список профилей по типу
-  listProfiles(type) {
-    const profiles = [];
-    
-    for (const [key, profile] of this.profiles) {
-      if (profile.type === type) {
-        profiles.push({
-          name: profile.name,
-          host: profile.metadata.host,
-          port: profile.metadata.port,
-          username: profile.metadata.username,
-          createdAt: profile.metadata.createdAt,
-          lastUsed: profile.metadata.lastUsed,
-          accessCount: profile.metadata.accessCount
-        });
+      if (error.code === 'ENOENT') {
+        this.logger.info('No profiles file found, starting with empty profiles');
+        this.profiles.clear();
+      } else {
+        this.logger.error('Failed to load profiles', { error: error.message });
+        throw error;
       }
     }
-    
-    return profiles.sort((a, b) => b.lastUsed - a.lastUsed);
+  }
+
+  // Сохранение профилей в файл
+  async saveProfiles() {
+    try {
+      const profiles = Object.fromEntries(this.profiles);
+      const data = JSON.stringify(profiles, null, 2);
+      
+      await fs.writeFile(this.profilesFile, data, 'utf8');
+      this.stats.saved++;
+      this.logger.info('Profiles saved successfully');
+      
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to save profiles', { error: error.message });
+      throw error;
+    }
+  }
+
+  // Создание/обновление профиля
+  async setProfile(name, config) {
+    try {
+      if (!name || typeof name !== 'string') {
+        throw new Error('Profile name must be a non-empty string');
+      }
+
+      if (!config || typeof config !== 'object') {
+        throw new Error('Profile config must be an object');
+      }
+
+      // Создание копии конфигурации
+      const profile = { ...config };
+
+      // Шифрование пароля
+      if (profile.password) {
+        profile.password = this.security.encrypt(profile.password);
+        profile.encrypted = true;
+      }
+
+      // Добавление метаданных
+      profile.created_at = profile.created_at || new Date().toISOString();
+      profile.updated_at = new Date().toISOString();
+
+      this.profiles.set(name, profile);
+      await this.saveProfiles();
+      
+      this.stats.created++;
+      this.logger.info('Profile created/updated', { name, host: profile.host });
+      
+      return { success: true, message: `Profile '${name}' saved successfully` };
+      
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to set profile', { name, error: error.message });
+      throw error;
+    }
+  }
+
+  // Получение профиля с расшифровкой пароля
+  async getProfile(name) {
+    try {
+      if (!name || typeof name !== 'string') {
+        throw new Error('Profile name must be a non-empty string');
+      }
+
+      const profile = this.profiles.get(name);
+      if (!profile) {
+        throw new Error(`Profile '${name}' not found`);
+      }
+
+      // Создание копии профиля
+      const result = { ...profile };
+
+      // Расшифровка пароля
+      if (result.encrypted && result.password) {
+        try {
+          result.password = this.security.decrypt(result.password);
+          delete result.encrypted;
+        } catch (error) {
+          this.logger.error('Failed to decrypt password', { name, error: error.message });
+          throw new Error('Failed to decrypt profile password');
+        }
+      }
+
+      this.logger.debug('Profile retrieved', { name, host: result.host });
+      return result;
+      
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to get profile', { name, error: error.message });
+      throw error;
+    }
+  }
+
+  // Получение списка профилей (без паролей)
+  async listProfiles() {
+    try {
+      const profiles = [];
+      
+      for (const [name, profile] of this.profiles) {
+        profiles.push({
+          name,
+          host: profile.host,
+          port: profile.port,
+          username: profile.username,
+          database: profile.database,
+          created_at: profile.created_at,
+          updated_at: profile.updated_at
+        });
+      }
+      
+      this.logger.debug('Profiles listed', { count: profiles.length });
+      return profiles;
+      
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to list profiles', { error: error.message });
+      throw error;
+    }
   }
 
   // Удаление профиля
-  deleteProfile(type, name) {
-    const profileKey = `${type}_${name}`;
-    const deleted = this.profiles.delete(profileKey);
-    
-    if (deleted) {
-      logger.info(`Profile deleted: ${type}/${name}`);
-    }
-    
-    return deleted;
-  }
-
-  // Обновление профиля
-  async updateProfile(type, name, updates) {
-    const profile = this.profiles.get(`${type}_${name}`);
-    
-    if (!profile) {
-      throw new Error(`Profile '${name}' not found for type '${type}'`);
-    }
-    
-    // Валидация обновлений
-    if (updates.password) {
-      await this._validateSecurity(updates);
-    }
-    
-    // Обновление конфигурации
-    const currentConfig = await this._decryptSensitiveData(profile.config);
-    const updatedConfig = { ...currentConfig, ...updates };
-    const encryptedConfig = await this._encryptSensitiveData(updatedConfig);
-    
-    profile.config = encryptedConfig;
-    profile.metadata.updatedAt = new Date();
-    
-    logger.info(`Profile updated: ${type}/${name}`);
-    
-    return true;
-  }
-
-  // Валидация конфигурации профиля
-  _validateProfileConfig(type, config) {
-    const requiredFields = {
-      postgresql: ['host', 'username', 'password', 'database'],
-      ssh: ['host', 'username', 'password']
-    };
-    
-    const required = requiredFields[type];
-    if (!required) {
-      throw new Error(`Unsupported profile type: ${type}`);
-    }
-    
-    for (const field of required) {
-      if (!config[field]) {
-        throw new Error(`Missing required field: ${field}`);
+  async deleteProfile(name) {
+    try {
+      if (!name || typeof name !== 'string') {
+        throw new Error('Profile name must be a non-empty string');
       }
-    }
-    
-    // Дополнительная валидация через ValidationService
-    if (this.validationService) {
-      if (type === 'postgresql') {
-        this.validationService.validatePostgreSQLConnection(config);
-      } else if (type === 'ssh') {
-        this.validationService.validateSSHConnection(config);
+
+      if (!this.profiles.has(name)) {
+        throw new Error(`Profile '${name}' not found`);
       }
-    }
-  }
 
-  // Валидация безопасности
-  async _validateSecurity(config) {
-    if (this.securityService) {
-      this.securityService.validatePassword(config.password);
-      this.securityService.validateHost(config.host);
-    }
-  }
-
-  // Тестирование подключения
-  async _testConnection(type, config) {
-    // Здесь будет интеграция с ConnectionService для тестирования
-    // Временная заглушка
-    logger.debug(`Testing connection: ${type} to ${config.host}`);
-    return true;
-  }
-
-  // Шифрование чувствительных данных
-  async _encryptSensitiveData(config) {
-    if (!this.securityService) {
-      return config; // Без шифрования если SecurityService недоступен
-    }
-    
-    const encrypted = { ...config };
-    
-    if (config.password) {
-      encrypted.password = this.securityService.encrypt(config.password);
-    }
-    
-    return encrypted;
-  }
-
-  // Расшифровка чувствительных данных
-  async _decryptSensitiveData(config) {
-    if (!this.securityService) {
-      return config; // Без расшифровки если SecurityService недоступен
-    }
-    
-    const decrypted = { ...config };
-    
-    if (config.password && typeof config.password === 'object') {
-      decrypted.password = this.securityService.decrypt(config.password);
-    }
-    
-    return decrypted;
-  }
-
-  // Очистка старых профилей
-  cleanupOldProfiles(maxAge = 2592000000) { // 30 дней
-    const now = new Date();
-    const toRemove = [];
-    
-    for (const [key, profile] of this.profiles) {
-      const age = now - profile.metadata.createdAt;
-      const lastUsedAge = profile.metadata.lastUsed ? 
-        now - profile.metadata.lastUsed : age;
+      this.profiles.delete(name);
+      await this.saveProfiles();
       
-      if (lastUsedAge > maxAge) {
-        toRemove.push(key);
-      }
+      this.logger.info('Profile deleted', { name });
+      return { success: true, message: `Profile '${name}' deleted successfully` };
+      
+    } catch (error) {
+      this.stats.errors++;
+      this.logger.error('Failed to delete profile', { name, error: error.message });
+      throw error;
     }
-    
-    toRemove.forEach(key => {
-      this.profiles.delete(key);
-      logger.debug(`Cleaned up old profile: ${key}`);
-    });
-    
-    return toRemove.length;
+  }
+
+  // Проверка существования профиля
+  hasProfile(name) {
+    return this.profiles.has(name);
   }
 
   // Получение статистики
   getStats() {
     return {
-      ...this.profileStats,
-      totalProfiles: this.profiles.size,
-      profilesByType: this._getProfilesByType()
+      ...this.stats,
+      total_profiles: this.profiles.size
     };
   }
 
-  // Группировка профилей по типам
-  _getProfilesByType() {
-    const types = {};
-    
-    for (const profile of this.profiles.values()) {
-      if (!types[profile.type]) {
-        types[profile.type] = 0;
-      }
-      types[profile.type]++;
+  // Очистка сервиса
+  async cleanup() {
+    try {
+      // Очистка профилей из памяти
+      this.profiles.clear();
+      this.logger.info('Profile service cleaned up');
+    } catch (error) {
+      this.logger.error('Failed to cleanup profile service', { error: error.message });
+      throw error;
     }
-    
-    return types;
-  }
-
-  // Экспорт профилей (без чувствительных данных)
-  exportProfiles() {
-    const exported = [];
-    
-    for (const profile of this.profiles.values()) {
-      exported.push({
-        type: profile.type,
-        name: profile.name,
-        metadata: profile.metadata
-      });
-    }
-    
-    return exported;
   }
 }
 
-module.exports = ProfileService; 
+function createProfileService(logger, security) {
+  const service = new ProfileService(logger, security);
+  // Возвращаем прокси для автоматической инициализации
+  return new Proxy(service, {
+    get(target, prop) {
+      if (prop === 'initialize' || prop === 'constructor') {
+        return target[prop];
+      }
+      
+      // Автоматическая инициализация при первом обращении
+      if (!target._initialized) {
+        target._initialized = true;
+        target.initialize().catch(error => {
+          target.logger.error('Auto-initialization failed', { error: error.message });
+        });
+      }
+      
+      return target[prop];
+    }
+  });
+}
+
+module.exports = { createProfileService, ProfileService }; 

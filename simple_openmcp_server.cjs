@@ -190,10 +190,7 @@ class MCPServer {
   // Обработка API операций
   async handleAPI(args) {
     this.ensureInitialized();
-    
-    // Пока используем старый API менеджер, позже создадим новый
-    const { APIManager } = require('./src/api/index.cjs');
-    const manager = new APIManager();
+    const manager = this.container.get('apiManager');
     return await manager.handleAction(args);
   }
 
