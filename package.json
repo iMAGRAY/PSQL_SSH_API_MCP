@@ -1,14 +1,16 @@
 {
   "name": "postgresql-api-ssh-mcp-server",
-  "version": "1.0.0",
-  "description": "🚀 Универсальный MCP сервер для PostgreSQL, REST API и SSH операций с расширенными возможностями ИИ анализа и безопасным редактированием баз данных",
+  "version": "3.0.0",
+  "description": "🚀 Модульный MCP сервер для PostgreSQL, REST API и SSH операций с защитой от уязвимостей",
   "main": "simple_openmcp_server.cjs",
   "type": "commonjs",
   "scripts": {
     "start": "node simple_openmcp_server.cjs",
-    "test": "node simple_openmcp_server.cjs --test",
+    "test": "node tests/security.test.js",
     "dev": "node simple_openmcp_server.cjs",
-    "check": "node -c simple_openmcp_server.cjs"
+    "check": "node --check simple_openmcp_server.cjs",
+    "test:security": "node tests/security.test.js",
+    "modern": "node server.js"
   },
   "keywords": [
     "mcp",
@@ -57,11 +59,15 @@
   "homepage": "https://github.com/your-username/postgresql-api-ssh-mcp-server#readme",
   "files": [
     "simple_openmcp_server.cjs",
+    "src/",
+    "tests/",
     "package.json",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
-    "mcp_config.md"
+    "mcp_config.md",
+    "FINAL_STATUS.md",
+    "MODULAR_REFACTORING_REPORT.md"
   ],
   "os": [
     "darwin",
