@@ -1,1 +1,15 @@
-{}
+{
+  "remote-test": {
+    "type": "postgresql",
+    "host": "1bb84d1fbea33d62faf51337.twc1.net",
+    "port": 5432,
+    "username": "gen_user",
+    "database": "default_db",
+    "ssl": true,
+    "created_at": "2025-09-25T21:57:19.116Z",
+    "updated_at": "2025-09-25T21:57:19.116Z",
+    "secrets": {
+      "password": "25e36ce5da4d9b7d548bd054cb3d2f30:af230a1827deb73a4641728782518045"
+    }
+  }
+}
